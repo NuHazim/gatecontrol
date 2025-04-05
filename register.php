@@ -27,15 +27,16 @@ if(isset($_POST['submitButton'])) {
             throw new Exception("Only JPG, JPEG, PNG, PDF & GIF files are allowed.");
         }
 
-        // Move uploaded file first
+        // Move uploaded file (already compressed client-side)
         if(!move_uploaded_file($_FILES["gambarKenderaan"]["tmp_name"], $targetFile)) {
             throw new Exception("Failed to upload image.");
         }
         
-        // If it's an image (not PDF), compress it aggressively to ≤1MB
+        // Verify file size (client-side compression should handle this)
         $maxFileSize = 1 * 1024 * 1024; // 1MB in bytes
-        if(in_array($fileType, ['jpg', 'jpeg', 'png', 'gif']) && $fileType != 'pdf') {
-            $targetFile = forceCompressImage($targetFile, $maxFileSize);
+        if(filesize($targetFile) > $maxFileSize) {
+            unlink($targetFile);
+            throw new Exception("Image is still too large after compression. Please try another image.");
         }
         
         // Prepare SQL with PDO
@@ -67,80 +68,6 @@ if(isset($_POST['submitButton'])) {
         $error = "Error: " . $e->getMessage();
     }
 }
-
-/**
- * Forcefully compresses an image to under $maxFileSize (quality doesn't matter)
- */
-function forceCompressImage($sourcePath, $maxFileSize) {
-    // Check if already small enough
-    if (filesize($sourcePath) <= $maxFileSize) {
-        return $sourcePath;
-    }
-
-    // Get image info
-    $info = getimagesize($sourcePath);
-    $mime = $info['mime'];
-
-    // Create image based on mime type
-    switch($mime) {
-        case 'image/jpeg':
-            $image = imagecreatefromjpeg($sourcePath);
-            break;
-        case 'image/png':
-            $image = imagecreatefrompng($sourcePath);
-            break;
-        case 'image/gif':
-            $image = imagecreatefromgif($sourcePath);
-            break;
-        default:
-            return $sourcePath; // Not a supported image type
-    }
-
-    // Start with high compression (low quality)
-    $quality = 30; // Start aggressively
-    $tempFile = tempnam(sys_get_temp_dir(), 'compressed_img') . '.jpg';
-
-    // Keep reducing quality until under max size
-    while ($quality >= 10) { // Don't go below 10 (too extreme)
-        imagejpeg($image, $tempFile, $quality);
-
-        // If under max size, replace original
-        if (filesize($tempFile) <= $maxFileSize) {
-            rename($tempFile, $sourcePath);
-            imagedestroy($image);
-            return $sourcePath;
-        }
-
-        // Reduce quality further
-        $quality -= 5;
-    }
-
-    // If still too big, resize dimensions aggressively
-    $originalWidth = $info[0];
-    $originalHeight = $info[1];
-    $ratio = sqrt($maxFileSize / filesize($tempFile)); // Calculate required reduction
-    $newWidth = max(100, floor($originalWidth * $ratio)); // Don't go below 100px width
-    $newHeight = floor($originalHeight * ($newWidth / $originalWidth));
-
-    // Create resized image
-    $resizedImage = imagecreatetruecolor($newWidth, $newHeight);
-    imagecopyresampled($resizedImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $originalWidth, $originalHeight);
-    imagejpeg($resizedImage, $tempFile, 30); // Force low quality
-
-    // Replace original if successful
-    if (filesize($tempFile) <= $maxFileSize) {
-        rename($tempFile, $sourcePath);
-        imagedestroy($image);
-        imagedestroy($resizedImage);
-        return $sourcePath;
-    }
-
-    // If still too big, give up and delete
-    unlink($tempFile);
-    imagedestroy($image);
-    imagedestroy($resizedImage);
-    throw new Exception("Could not compress image below 1MB even with extreme compression.");
-}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -149,6 +76,19 @@ function forceCompressImage($sourcePath, $maxFileSize) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Register form</title>
     <link rel="stylesheet" href="register.css">
+    <!-- Include CompressorJS library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/CompressorJS/1.2.1/compressor.min.js"></script>
+    <style>
+        .preview-container {
+            margin: 15px 0;
+        }
+        .preview-image {
+            max-width: 200px;
+            max-height: 200px;
+            display: block;
+            margin-top: 10px;
+        }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -163,7 +103,7 @@ function forceCompressImage($sourcePath, $maxFileSize) {
                 <?= htmlspecialchars($error) ?>
             </div>
         <?php endif; ?>
-        <form action="register.php" method="post" enctype="multipart/form-data">
+        <form action="register.php" method="post" enctype="multipart/form-data" id="registrationForm">
             <label>Full name</label>
             <input name="fName" type="text" required>
             
@@ -182,11 +122,82 @@ function forceCompressImage($sourcePath, $maxFileSize) {
             <input name="noKenderaan" type="text" required>
             
             <label>Gambar Kad Pengenalan</label>
-            <input name="gambarKenderaan" type="file" required accept="image/*,.pdf">
-            <small>Images will be automatically resized to under 1MB</small>
+            <input id="originalImage" type="file" accept="image/*,.pdf" required>
+            <input type="hidden" name="gambarKenderaan" id="compressedImageInput">
+            <small>Images will be automatically compressed to under 1MB</small>
             
-            <button name="submitButton" type="submit">Submit</button>
+            <div class="preview-container">
+                <strong>Preview:</strong>
+                <img id="imagePreview" class="preview-image" style="display: none;">
+                <div id="fileInfo"></div>
+            </div>
+            
+            <button name="submitButton" type="submit" id="submitButton">Submit</button>
         </form>
     </div>
+
+    <script>
+        document.getElementById('originalImage').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            // Skip compression for PDFs
+            if (file.type === 'application/pdf') {
+                // For PDFs, just use the original file
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                document.getElementById('compressedImageInput').files = dataTransfer.files;
+                document.getElementById('fileInfo').textContent = `PDF file: ${file.name} (${(file.size/1024/1024).toFixed(2)}MB)`;
+                document.getElementById('imagePreview').style.display = 'none';
+                return;
+            }
+            
+            // Show preview
+            const preview = document.getElementById('imagePreview');
+            preview.src = URL.createObjectURL(file);
+            preview.style.display = 'block';
+            
+            // Compress image
+            new Compressor(file, {
+                quality: 0.6, // Adjust quality (0.6 = 60%)
+                maxWidth: 1024, // Maximum width
+                maxHeight: 1024, // Maximum height
+                convertSize: 500000, // Convert to JPEG if size > 500KB
+                success(result) {
+                    // Create a new file input with the compressed image
+                    const compressedFile = new File([result], file.name, {
+                        type: result.type,
+                        lastModified: Date.now()
+                    });
+                    
+                    const dataTransfer = new DataTransfer();
+                    dataTransfer.items.add(compressedFile);
+                    document.getElementById('compressedImageInput').files = dataTransfer.files;
+                    
+                    // Show file info
+                    const originalSize = (file.size / 1024 / 1024).toFixed(2);
+                    const compressedSize = (result.size / 1024 / 1024).toFixed(2);
+                    document.getElementById('fileInfo').textContent = 
+                        `Original: ${originalSize}MB → Compressed: ${compressedSize}MB`;
+                    
+                    // Update preview
+                    preview.src = URL.createObjectURL(result);
+                },
+                error(err) {
+                    console.error('Compression error:', err);
+                    alert('Error compressing image. Please try another image.');
+                }
+            });
+        });
+        
+        // Update form to submit the compressed image
+        document.getElementById('registrationForm').addEventListener('submit', function(e) {
+            const compressedInput = document.getElementById('compressedImageInput');
+            if (!compressedInput.files.length) {
+                e.preventDefault();
+                alert('Please select an image first.');
+            }
+        });
+    </script>
 </body>
 </html>
