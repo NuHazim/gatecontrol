@@ -32,15 +32,10 @@ if(isset($_POST['submitButton'])) {
             throw new Exception("Failed to upload image.");
         }
         
-        // Compress/resize image if it's an image file (not PDF)
+        // If it's an image (not PDF), compress it aggressively to ≤1MB
         $maxFileSize = 1 * 1024 * 1024; // 1MB in bytes
         if(in_array($fileType, ['jpg', 'jpeg', 'png', 'gif']) && $fileType != 'pdf') {
-            $targetFile = compressAndResizeImage($targetFile, $maxFileSize);
-        }
-        
-        // Check final file size
-        if(filesize($targetFile) > $maxFileSize) {
-            throw new Exception("Unable to reduce file size below 1MB. Please try with a different image.");
+            $targetFile = forceCompressImage($targetFile, $maxFileSize);
         }
         
         // Prepare SQL with PDO
@@ -74,17 +69,18 @@ if(isset($_POST['submitButton'])) {
 }
 
 /**
- * Automatically compress and resize image to be under maxFileSize
+ * Forcefully compresses an image to under $maxFileSize (quality doesn't matter)
  */
-function compressAndResizeImage($sourcePath, $maxFileSize) {
-    $quality = 85; // Start with this quality
-    $minQuality = 30; // Don't go below this quality
-    $maxWidth = 2000; // Maximum width to prevent excessive processing
-    
-    // Get original image info
+function forceCompressImage($sourcePath, $maxFileSize) {
+    // Check if already small enough
+    if (filesize($sourcePath) <= $maxFileSize) {
+        return $sourcePath;
+    }
+
+    // Get image info
     $info = getimagesize($sourcePath);
     $mime = $info['mime'];
-    
+
     // Create image based on mime type
     switch($mime) {
         case 'image/jpeg':
@@ -97,62 +93,53 @@ function compressAndResizeImage($sourcePath, $maxFileSize) {
             $image = imagecreatefromgif($sourcePath);
             break;
         default:
-            return $sourcePath;
+            return $sourcePath; // Not a supported image type
     }
-    
-    // Get original dimensions
-    $originalWidth = $info[0];
-    $originalHeight = $info[1];
-    
-    // Temporary file for testing size
-    $tempFile = tempnam(sys_get_temp_dir(), 'img') . '.jpg';
-    
-    // Try different quality levels
-    while ($quality >= $minQuality) {
-        // Save with current quality
+
+    // Start with high compression (low quality)
+    $quality = 30; // Start aggressively
+    $tempFile = tempnam(sys_get_temp_dir(), 'compressed_img') . '.jpg';
+
+    // Keep reducing quality until under max size
+    while ($quality >= 10) { // Don't go below 10 (too extreme)
         imagejpeg($image, $tempFile, $quality);
-        
-        // Check if file size is acceptable
-        if(filesize($tempFile) <= $maxFileSize) {
-            // If yes, replace original with compressed version
+
+        // If under max size, replace original
+        if (filesize($tempFile) <= $maxFileSize) {
             rename($tempFile, $sourcePath);
             imagedestroy($image);
             return $sourcePath;
         }
-        
-        // If still too big, try reducing dimensions
-        if($quality <= 70) {
-            $ratio = sqrt($maxFileSize / filesize($tempFile));
-            $newWidth = min($maxWidth, floor($originalWidth * $ratio));
-            $newHeight = floor($originalHeight * ($newWidth / $originalWidth));
-            
-            // Create resized image
-            $resizedImage = imagecreatetruecolor($newWidth, $newHeight);
-            imagecopyresampled($resizedImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $originalWidth, $originalHeight);
-            
-            // Save resized image
-            imagejpeg($resizedImage, $tempFile, $quality);
-            imagedestroy($resizedImage);
-            
-            if(filesize($tempFile) <= $maxFileSize) {
-                rename($tempFile, $sourcePath);
-                imagedestroy($image);
-                return $sourcePath;
-            }
-        }
-        
-        // Reduce quality for next iteration
+
+        // Reduce quality further
         $quality -= 5;
     }
-    
-    // Clean up
-    if(file_exists($tempFile)) {
-        unlink($tempFile);
+
+    // If still too big, resize dimensions aggressively
+    $originalWidth = $info[0];
+    $originalHeight = $info[1];
+    $ratio = sqrt($maxFileSize / filesize($tempFile)); // Calculate required reduction
+    $newWidth = max(100, floor($originalWidth * $ratio)); // Don't go below 100px width
+    $newHeight = floor($originalHeight * ($newWidth / $originalWidth));
+
+    // Create resized image
+    $resizedImage = imagecreatetruecolor($newWidth, $newHeight);
+    imagecopyresampled($resizedImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $originalWidth, $originalHeight);
+    imagejpeg($resizedImage, $tempFile, 30); // Force low quality
+
+    // Replace original if successful
+    if (filesize($tempFile) <= $maxFileSize) {
+        rename($tempFile, $sourcePath);
+        imagedestroy($image);
+        imagedestroy($resizedImage);
+        return $sourcePath;
     }
+
+    // If still too big, give up and delete
+    unlink($tempFile);
     imagedestroy($image);
-    
-    // If we get here, we couldn't reduce enough
-    throw new Exception("Unable to reduce image below 1MB while maintaining acceptable quality.");
+    imagedestroy($resizedImage);
+    throw new Exception("Could not compress image below 1MB even with extreme compression.");
 }
 ?>
 <!DOCTYPE html>
