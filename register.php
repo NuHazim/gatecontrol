@@ -15,12 +15,6 @@ if(isset($_POST['submitButton'])) {
             mkdir($targetDir, 0777, true);
         }
         
-        // Validate file size (1MB max)
-        $maxFileSize = 1 * 1024 * 1024; // 1MB in bytes
-        if ($_FILES['gambarKenderaan']['size'] > $maxFileSize) {
-            throw new Exception("File size exceeds 1MB limit.");
-        }
-        
         $fileName = uniqid() . '_' . basename($_FILES['gambarKenderaan']['name']);
         $targetFile = $targetDir . $fileName;
         $fileType = strtolower(pathinfo($targetFile, PATHINFO_EXTENSION));
@@ -38,12 +32,15 @@ if(isset($_POST['submitButton'])) {
             throw new Exception("Failed to upload image.");
         }
         
-        // Compress image if it's an image file (not PDF)
+        // Compress/resize image if it's an image file (not PDF)
+        $maxFileSize = 1 * 1024 * 1024; // 1MB in bytes
         if(in_array($fileType, ['jpg', 'jpeg', 'png', 'gif']) && $fileType != 'pdf') {
-            $compressedFile = compressImage($targetFile, $targetFile, 75); // 75% quality
-            if(!$compressedFile) {
-                throw new Exception("Failed to compress image.");
-            }
+            $targetFile = compressAndResizeImage($targetFile, $maxFileSize);
+        }
+        
+        // Check final file size
+        if(filesize($targetFile) > $maxFileSize) {
+            throw new Exception("Unable to reduce file size below 1MB. Please try with a different image.");
         }
         
         // Prepare SQL with PDO
@@ -77,29 +74,85 @@ if(isset($_POST['submitButton'])) {
 }
 
 /**
- * Compress image function
+ * Automatically compress and resize image to be under maxFileSize
  */
-function compressImage($source, $destination, $quality) {
-    // Get image info
-    $info = getimagesize($source);
+function compressAndResizeImage($sourcePath, $maxFileSize) {
+    $quality = 85; // Start with this quality
+    $minQuality = 30; // Don't go below this quality
+    $maxWidth = 2000; // Maximum width to prevent excessive processing
     
-    if ($info['mime'] == 'image/jpeg') {
-        $image = imagecreatefromjpeg($source);
-    } elseif ($info['mime'] == 'image/png') {
-        $image = imagecreatefrompng($source);
-    } elseif ($info['mime'] == 'image/gif') {
-        $image = imagecreatefromgif($source);
-    } else {
-        return false;
+    // Get original image info
+    $info = getimagesize($sourcePath);
+    $mime = $info['mime'];
+    
+    // Create image based on mime type
+    switch($mime) {
+        case 'image/jpeg':
+            $image = imagecreatefromjpeg($sourcePath);
+            break;
+        case 'image/png':
+            $image = imagecreatefrompng($sourcePath);
+            break;
+        case 'image/gif':
+            $image = imagecreatefromgif($sourcePath);
+            break;
+        default:
+            return $sourcePath;
     }
     
-    // Compress and save image
-    $result = imagejpeg($image, $destination, $quality);
+    // Get original dimensions
+    $originalWidth = $info[0];
+    $originalHeight = $info[1];
     
-    // Free memory
+    // Temporary file for testing size
+    $tempFile = tempnam(sys_get_temp_dir(), 'img') . '.jpg';
+    
+    // Try different quality levels
+    while ($quality >= $minQuality) {
+        // Save with current quality
+        imagejpeg($image, $tempFile, $quality);
+        
+        // Check if file size is acceptable
+        if(filesize($tempFile) <= $maxFileSize) {
+            // If yes, replace original with compressed version
+            rename($tempFile, $sourcePath);
+            imagedestroy($image);
+            return $sourcePath;
+        }
+        
+        // If still too big, try reducing dimensions
+        if($quality <= 70) {
+            $ratio = sqrt($maxFileSize / filesize($tempFile));
+            $newWidth = min($maxWidth, floor($originalWidth * $ratio));
+            $newHeight = floor($originalHeight * ($newWidth / $originalWidth));
+            
+            // Create resized image
+            $resizedImage = imagecreatetruecolor($newWidth, $newHeight);
+            imagecopyresampled($resizedImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $originalWidth, $originalHeight);
+            
+            // Save resized image
+            imagejpeg($resizedImage, $tempFile, $quality);
+            imagedestroy($resizedImage);
+            
+            if(filesize($tempFile) <= $maxFileSize) {
+                rename($tempFile, $sourcePath);
+                imagedestroy($image);
+                return $sourcePath;
+            }
+        }
+        
+        // Reduce quality for next iteration
+        $quality -= 5;
+    }
+    
+    // Clean up
+    if(file_exists($tempFile)) {
+        unlink($tempFile);
+    }
     imagedestroy($image);
     
-    return $result;
+    // If we get here, we couldn't reduce enough
+    throw new Exception("Unable to reduce image below 1MB while maintaining acceptable quality.");
 }
 ?>
 <!DOCTYPE html>
@@ -143,7 +196,7 @@ function compressImage($source, $destination, $quality) {
             
             <label>Gambar Kad Pengenalan</label>
             <input name="gambarKenderaan" type="file" required accept="image/*,.pdf">
-            <small>Maximum file size: 1MB</small>
+            <small>Images will be automatically resized to under 1MB</small>
             
             <button name="submitButton" type="submit">Submit</button>
         </form>
