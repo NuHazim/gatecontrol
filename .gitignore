@@ -1,2 +1,4 @@
 #ignore all .inc file
 *.inc
+#ignore all files in any directory called pictureFiles
+pictureFiles/
