@@ -1,42 +1,22 @@
 <?php
 include("database.inc");
 
-// Increase PHP limits for large files (adjust these values as needed)
-ini_set('upload_max_filesize', '10M');
-ini_set('post_max_size', '12M');
-ini_set('memory_limit', '256M');
-ini_set('max_execution_time', '300');
-
-function compressImage($source, $destination, $maxFileSize = 1000000) {
+function compressImage($source, $destination, $maxFileSize = 100000) {
     // Get image info
-    $imgInfo = @getimagesize($source);
+    $imgInfo = getimagesize($source);
     if (!$imgInfo) {
         return false; // Not a valid image
     }
     
-    list($width, $height) = $imgInfo;
     $mime = $imgInfo['mime'];
-    
-    // Calculate new dimensions to reduce size (max 1200px on the longest side)
-    $maxDimension = 1200;
-    if ($width > $height && $width > $maxDimension) {
-        $newWidth = $maxDimension;
-        $newHeight = intval($height * ($maxDimension / $width));
-    } elseif ($height > $maxDimension) {
-        $newHeight = $maxDimension;
-        $newWidth = intval($width * ($maxDimension / $height));
-    } else {
-        $newWidth = $width;
-        $newHeight = $height;
-    }
     
     // Create a new image from file
     switch($mime){
         case 'image/jpeg':
-            $image = @imagecreatefromjpeg($source);
+            $image = imagecreatefromjpeg($source);
             break;
         case 'image/png':
-            $image = @imagecreatefrompng($source);
+            $image = imagecreatefrompng($source);
             // Preserve transparency
             imagealphablending($image, false);
             imagesavealpha($image, true);
@@ -45,50 +25,34 @@ function compressImage($source, $destination, $maxFileSize = 1000000) {
             return false; // Only process JPEG and PNG
     }
     
-    if (!$image) return false;
-    
-    // Create new image with adjusted dimensions
-    $newImage = imagecreatetruecolor($newWidth, $newHeight);
-    
-    // Preserve transparency for PNG
-    if ($mime == 'image/png') {
-        imagealphablending($newImage, false);
-        imagesavealpha($newImage, true);
-        $transparent = imagecolorallocatealpha($newImage, 255, 255, 255, 127);
-        imagefilledrectangle($newImage, 0, 0, $newWidth, $newHeight, $transparent);
-    }
-    
-    // Resize the image
-    imagecopyresampled($newImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-    
-    // Compression settings
-    $quality = 80; // Start with decent quality
+    // Initial quality settings
+    $quality = 75;
     $success = false;
     
     // Try to compress with decreasing quality until under max size
     for ($i = 0; $i < 5; $i++) {
         if ($mime == 'image/jpeg') {
-            $success = imagejpeg($newImage, $destination, $quality);
+            $success = imagejpeg($image, $destination, $quality);
         } elseif ($mime == 'image/png') {
             // PNG quality is 0-9 (higher means more compression)
             $pngQuality = 9 - round($quality / 11.11); // Map 0-100 to 9-0
-            $success = imagepng($newImage, $destination, $pngQuality);
+            $success = imagepng($image, $destination, $pngQuality);
         }
         
-        if (!$success) break;
+        if (!$success) {
+            break;
+        }
         
-        clearstatcache(); // Clear cached filesize
         $currentSize = filesize($destination);
-        if ($currentSize <= $maxFileSize) break;
+        if ($currentSize <= $maxFileSize) {
+            break;
+        }
         
         $quality -= 15; // Reduce quality for next attempt
         if ($quality < 10) $quality = 10;
     }
     
     imagedestroy($image);
-    imagedestroy($newImage);
-    
-    clearstatcache();
     return $success && filesize($destination) <= $maxFileSize;
 }
 
@@ -106,33 +70,29 @@ if(isset($_POST['submitButton'])) {
             mkdir($targetDir, 0777, true);
         }
         
-        // Validate file upload
-        if (!isset($_FILES['gambarKenderaan']) || $_FILES['gambarKenderaan']['error'] !== UPLOAD_ERR_OK) {
-            throw new Exception("File upload failed. Error code: " . $_FILES['gambarKenderaan']['error']);
-        }
-        
         $originalFileName = basename($_FILES['gambarKenderaan']['name']);
         $fileType = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
         $fileName = uniqid() . '_' . $originalFileName;
         $targetFile = $targetDir . $fileName;
-        $tempFile = $_FILES['gambarKenderaan']['tmp_name'];
         
         date_default_timezone_set('Asia/Kuala_Lumpur');
         $createdDate = date("Y-m-d H:i:s");
         
-        // Validate file type
+        // Validate file upload
         $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'pdf'];
         if(!in_array($fileType, $allowedTypes)) {
             throw new Exception("Only JPG, JPEG, PNG, PDF & GIF files are allowed.");
         }
 
-        // Handle image upload differently from PDF/GIF
+        // Handle image upload differently from PDF
+        $tempFile = $_FILES['gambarKenderaan']['tmp_name'];
+        
         if (in_array($fileType, ['jpg', 'jpeg', 'png'])) {
             // Compress image to under 100KB
             if (!compressImage($tempFile, $targetFile)) {
-                throw new Exception("Failed to process image. Please try with a smaller file or different format.");
+                throw new Exception("Failed to compress image or image is still too large after compression.");
             }
-        } else {
+        }   else {
             // For PDF and GIF, just move the file (no compression)
             if (!move_uploaded_file($tempFile, $targetFile)) {
                 throw new Exception("Failed to upload file.");
@@ -165,8 +125,57 @@ if(isset($_POST['submitButton'])) {
         
         // Clean up if there was an error after file upload but before DB insertion
         if (isset($targetFile) && file_exists($targetFile)) {
-            @unlink($targetFile);
+            unlink($targetFile);
         }
     }
 }
 ?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register form</title>
+    <link rel="stylesheet" href="register.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Register Form</h1>
+        <?php if(isset($success)): ?>
+            <div style="background-color: #d4edda; color: #155724; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+                <?= htmlspecialchars($success) ?>
+            </div>
+        <?php endif; ?>
+        <?php if(isset($error)): ?>
+            <div style="background-color: #f8d7da; color: #721c24; padding: 10px; border-radius: 5px; margin-bottom: 20px;">
+                <?= htmlspecialchars($error) ?>
+            </div>
+        <?php endif; ?>
+        <form action="register.php" method="post" enctype="multipart/form-data">
+            <label>Full ??name</label>
+            <input name="fName" type="text" required>
+            
+            <label>Alamat Kediaman penerima</label>
+            <select name="destination" required>
+                <option value="">Select an option</option>
+                <option value="TERES SEKSYEN 9">TERES SEKSYEN 9</option>
+                <option value="RAJAWALI">RAJAWALI</option>
+                <option value="MERPATI">MERPATI</option>
+            </select>
+            
+            <label>No. Alamat Penuh Kediaman</label>
+            <input name="alamat" type="text" required>
+            
+            <label>Nombor Kenderaan</label>
+            <input name="noKenderaan" type="text" required>
+            
+            <label>Gambar Kad Pengenalan</label>
+            <input name="gambarKenderaan" type="file" required accept="image/*,.pdf">
+            <small>Note: Images will be automatically compressed to under 100KB</small>
+            
+            <button name="submitButton" type="submit">Submit</button>
+        </form>
+    </div>
+</body>
+</html>
