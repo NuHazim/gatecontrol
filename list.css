@@ -1,0 +1,270 @@
+*{
+    font-family:"Roboto";
+    color:#333333;
+}
+body{
+    background-color:  #FFFDE7;
+    height:auto;
+    margin:0;
+    padding:0;
+    width:100%;
+    display:flex;
+    justify-content: center;
+    flex-direction: column;
+}
+i{
+    padding-right: 5px;
+}
+.container{
+    border:5px solid #f7a600; 
+    width:95%;
+    background-color: white;
+    border-radius: 10px;
+    margin:20px;
+    padding:20px;
+    margin-top: 80px;
+    margin-bottom: 80px;
+}
+.footer{
+    width: 100%;
+    position: relative;
+    bottom: 0;
+    left: 0;
+    right:0;
+    background-color: #f7a600;
+    height:300px;
+    display:flex;
+    justify-content: center;
+    flex-direction: column;
+    font-size: 1.5em;
+}
+hr{
+    width:50%;
+    border-color: black;
+}
+.contactBox,.followBox{
+    padding-left: 400px;
+}
+.navBar{
+    z-index: 2;
+    position:fixed;
+    top:0px;
+    right:0;
+    left:0;
+    height:64px;
+    background-color: #f7a600;
+    display:flex;
+    align-items: center;
+    transition:0.5s ease-in-out;
+}
+.logo{
+    margin:10px;
+    border-radius: 20px;
+}
+.updateButton{
+    background-color: #f7a600;
+}
+.updateButton:hover{
+    background-color: #d18d03;
+}
+.deleteButton{
+    background-color:#ffca5f;
+}
+thead tr{
+    background-color: #f7a600;
+}
+#myTable tr:nth-child(even),
+#theTable tr:nth-child(even) {
+    background-color: #f9d07c; /* or any color you prefer */
+}
+.deleteButton:hover{
+    background-color:#d5aa52;
+}
+.restoreButton{
+    background-color: #ffaa00;
+}
+.restoreButton:hover{
+    background-color: #e19600;
+}
+.updateButton,.deleteButton,.restoreButton{
+    padding:5px 10px;
+    margin:5px;
+    font-size: 1em;
+    border-radius: 10px;
+}
+tr td:last-child{
+    display: flex;
+    flex-direction: column;
+    width:110px;
+    justify-content: center;
+}
+button{
+    cursor:pointer;
+}
+#insertButton{
+    position:fixed;
+    right:20px;
+    bottom:20px;
+    z-index: 2;
+    background-color: #f7a600;
+    border-radius: 50%;
+    font-size: 2.3em;
+    width:80px;
+    height:80px;
+    padding:10px;
+    transition: 0.2s ease-in-out;
+    overflow: hidden;
+}
+
+#insertButton .insertText {
+    margin: 10px;
+    display: none;     
+}
+#insertButton:hover{
+    border-radius: 10px;
+    width:200px;
+    background-color: #d08b01;
+}
+#insertButton:hover .insertText {
+    display:inline;
+}
+.dataTables_wrapper .dataTables_paginate .paginate_button {
+    color: #ffffff !important;
+    background: white !important;
+    border: 1px solid #f7a600 !important;
+}
+
+/* Hover state */
+.dataTables_wrapper .dataTables_paginate .paginate_button:hover {
+    background: #f7a600 !important;
+    color: white !important;
+}
+
+/* Current page button */
+.dataTables_wrapper .dataTables_paginate .paginate_button.current {
+    background: #f7a600 !important;
+    color: white !important;
+}
+
+/* Disabled buttons */
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled,
+.dataTables_wrapper .dataTables_paginate .paginate_button.disabled:hover {
+    color: #999 !important;
+    background: transparent !important;
+}
+.navButton{
+    margin-right: 50px;
+    text-decoration: none;
+    font-size: 1.2em;
+    position:relative;
+    transition:0.2s ease-in-out;
+}
+.navButtons{
+    margin-left: 20%;
+}
+.navButton:hover,.active,.active i,.navButton:hover i{
+    color:white;
+}
+.navButton::after{
+    content:"";
+    position:absolute;
+    left:-10px;
+    display:inline-block;
+    right:-10px;
+    bottom:-10px;
+    background-color: white;
+    height:3px;
+    width:0;
+    transition:0.2s ease-in-out;
+}
+.navButton:hover::after,.active::after{
+    width:133%;
+}
+dialog{
+    min-width:700px;
+}
+.cancelButton{
+    background-color:#ffca5f ;
+    padding: 5px 10px;
+    font-size: 1.3em;
+    border-radius: 10px;
+}
+.cancelButton:hover{
+    background-color: #d6a951;
+}
+#saveButton,#addButton,.deleteButtonReal,.restoreButtonReal{
+    background-color:#f7a600 ;
+    padding: 5px 10px;
+    font-size: 1.3em;
+    border-radius: 10px;
+}
+#saveButton:hover,#addButton:hover,.deleteButtonReal:hover,.restoreButtonReal:hover{
+    background-color:#dc9300;
+}
+dialog input[type="text"]{
+    background-color: #fdeecf;
+    border-color: #f7a600;  
+}
+dialog{
+    border:none;
+    border-radius: 10px;
+    background-color: #f9da9c;
+    padding:30px;
+}
+dialog select{
+    background-color: #fdeecf;
+    border:3px solid #f7a600;
+}
+.axe{
+    position: absolute;
+    top:10px;
+    right:10px;
+    background-color: red;
+    border:none;
+    width:30px;
+    height:30px;
+    border-radius: 10px;
+    font-size: 1.3em;
+}
+.axe:hover{
+    background-color: rgb(223, 0, 0);
+}
+.axe:hover i{
+    color:white;
+}
+form {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 10px; /* Adds spacing between inputs */
+    width: 300px; /* Adjust width as needed */
+}
+
+label {
+    width:200px;
+    font-weight: bold;
+}
+.minibox{
+    width:600px;
+    display: flex;
+    flex-direction: row;
+}
+input, select {
+    padding: 5px;
+    font-size: 14px;
+    width: 100%;
+}
+#myTable td:nth-child(10), 
+#myTable td:nth-child(11) {
+    word-break: break-all; /* Break long words */
+    max-width: 150px; /* Adjust as needed */
+    white-space: normal; /* Allow wrapping */
+}
+#theTable td:nth-child(10), 
+#theTable td:nth-child(11) {
+    word-break: break-all; /* Break long words */
+    max-width: 150px; /* Adjust as needed */
+    white-space: normal; /* Allow wrapping */
+}
+
+
