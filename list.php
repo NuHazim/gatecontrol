@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <?php
-    include("database.php");
+    include("database.inc");
     if(isset($_POST['saveButton'])){
         $idValue = $_POST['idValue'];
         $noahli = $_POST['noahli'];

@@ -1,5 +1,5 @@
 <?php
-include("database.php");
+include("database.inc");
 //sometghi
 if(isset($_POST['submitButton'])) {
     try {
