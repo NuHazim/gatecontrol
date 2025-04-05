@@ -7,7 +7,7 @@ ini_set('post_max_size', '12M');
 ini_set('memory_limit', '256M');
 ini_set('max_execution_time', '300');
 
-function compressImage($source, $destination, $maxFileSize = 100000) {
+function compressImage($source, $destination, $maxFileSize = 1000000) {
     // Get image info
     $imgInfo = @getimagesize($source);
     if (!$imgInfo) {
