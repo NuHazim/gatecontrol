@@ -17,7 +17,8 @@ if(isset($_POST['submitButton'])) {
         $fileName = uniqid() . '_' . basename($_FILES['gambarKenderaan']['name']);
         $targetFile = $targetDir . $fileName;
         $fileType = strtolower(pathinfo($targetFile, PATHINFO_EXTENSION));
-
+        date_default_timezone_set('Asia/Kuala_Lumpur');
+        $createdDate=date("Y-m-d H:i:s");
         // Validate file upload
         $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'pdf'];
         if(!in_array($fileType, $allowedTypes)) {
@@ -25,8 +26,8 @@ if(isset($_POST['submitButton'])) {
         }
 
         // Prepare SQL with PDO
-        $sql = "INSERT INTO registeredlist (name, destination, alamat, noKenderaan, gambarDir) 
-                VALUES (:name, :destination, :alamat, :noKenderaan, :gambarDir)";
+        $sql = "INSERT INTO registeredlist (name, destination, alamat, noKenderaan, gambarDir,createdDate) 
+                VALUES (:name, :destination, :alamat, :noKenderaan, :gambarDir, :createdDate)";
         
         $stmt = $pdo->prepare($sql);
         
@@ -36,7 +37,7 @@ if(isset($_POST['submitButton'])) {
         $stmt->bindParam(':alamat', $alamat);
         $stmt->bindParam(':noKenderaan', $noKenderaan);
         $stmt->bindParam(':gambarDir', $targetFile);
-        
+        $stmt->bindParam(':createdDate',$createdDate);
         // Execute the statement
         $stmt->execute();
         

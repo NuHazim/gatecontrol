@@ -33,6 +33,7 @@
         $email1 = $_POST['email1'];
         $email2 = $_POST['email2'];
         $status = (int)$_POST['status'];
+        date_default_timezone_set('Asia/Kuala_Lumpur');
         $createdDate = date("Y-m-d H:i:s");
         $createdId = 0;
 
