@@ -9,13 +9,19 @@ if(isset($_POST['submitButton'])) {
         $alamat = $_POST['alamat'];
         $noKenderaan = $_POST['noKenderaan'];
         
-        // File upload handling
+        // File upload handling - NOW USING THE COMPRESSED IMAGE
         $targetDir = "pictureFiles/";
         if (!file_exists($targetDir)) {
             mkdir($targetDir, 0777, true);
         }
         
-        $fileName = uniqid() . '_' . basename($_FILES['gambarKenderaan']['name']);
+        // Get the compressed file (now from $_FILES['compressedImage'])
+        if(!isset($_FILES['compressedImage']) || $_FILES['compressedImage']['error'] !== UPLOAD_ERR_OK) {
+            throw new Exception("Please upload a valid image file.");
+        }
+        
+        $file = $_FILES['compressedImage'];
+        $fileName = uniqid() . '_' . basename($file['name']);
         $targetFile = $targetDir . $fileName;
         $fileType = strtolower(pathinfo($targetFile, PATHINFO_EXTENSION));
         date_default_timezone_set('Asia/Kuala_Lumpur');
@@ -27,16 +33,16 @@ if(isset($_POST['submitButton'])) {
             throw new Exception("Only JPG, JPEG, PNG, PDF & GIF files are allowed.");
         }
 
-        // Move uploaded file (already compressed client-side)
-        if(!move_uploaded_file($_FILES["gambarKenderaan"]["tmp_name"], $targetFile)) {
-            throw new Exception("Failed to upload image.");
+        // Move uploaded file
+        if(!move_uploaded_file($file["tmp_name"], $targetFile)) {
+            throw new Exception("Failed to upload file.");
         }
         
-        // Verify file size (client-side compression should handle this)
+        // Verify file size
         $maxFileSize = 1 * 1024 * 1024; // 1MB in bytes
         if(filesize($targetFile) > $maxFileSize) {
             unlink($targetFile);
-            throw new Exception("Image is still too large after compression. Please try another image.");
+            throw new Exception("File is still too large after compression. Please try another file.");
         }
         
         // Prepare SQL with PDO
@@ -123,7 +129,7 @@ if(isset($_POST['submitButton'])) {
             
             <label>Gambar Kad Pengenalan</label>
             <input id="originalImage" type="file" accept="image/*,.pdf" required>
-            <input type="hidden" name="gambarKenderaan" id="compressedImageInput">
+            <input type="file" name="compressedImage" id="compressedImageInput" style="display: none;">
             <small>Images will be automatically compressed to under 1MB</small>
             
             <div class="preview-container">
@@ -141,30 +147,28 @@ if(isset($_POST['submitButton'])) {
             const file = e.target.files[0];
             if (!file) return;
             
-            // Skip compression for PDFs
-            if (file.type === 'application/pdf') {
-                // For PDFs, just use the original file
-                const dataTransfer = new DataTransfer();
-                dataTransfer.items.add(file);
-                document.getElementById('compressedImageInput').files = dataTransfer.files;
-                document.getElementById('fileInfo').textContent = `PDF file: ${file.name} (${(file.size/1024/1024).toFixed(2)}MB)`;
-                document.getElementById('imagePreview').style.display = 'none';
-                return;
-            }
-            
             // Show preview
             const preview = document.getElementById('imagePreview');
             preview.src = URL.createObjectURL(file);
             preview.style.display = 'block';
             
+            // Skip compression for PDFs
+            if (file.type === 'application/pdf') {
+                // Create a new file input with the original PDF
+                const dataTransfer = new DataTransfer();
+                dataTransfer.items.add(file);
+                document.getElementById('compressedImageInput').files = dataTransfer.files;
+                document.getElementById('fileInfo').textContent = `PDF file: ${file.name} (${(file.size/1024/1024).toFixed(2)}MB)`;
+                return;
+            }
+            
             // Compress image
             new Compressor(file, {
-                quality: 0.6, // Adjust quality (0.6 = 60%)
-                maxWidth: 1024, // Maximum width
-                maxHeight: 1024, // Maximum height
-                convertSize: 500000, // Convert to JPEG if size > 500KB
+                quality: 0.6,
+                maxWidth: 1024,
+                maxHeight: 1024,
+                convertSize: 500000,
                 success(result) {
-                    // Create a new file input with the compressed image
                     const compressedFile = new File([result], file.name, {
                         type: result.type,
                         lastModified: Date.now()
@@ -188,15 +192,6 @@ if(isset($_POST['submitButton'])) {
                     alert('Error compressing image. Please try another image.');
                 }
             });
-        });
-        
-        // Update form to submit the compressed image
-        document.getElementById('registrationForm').addEventListener('submit', function(e) {
-            const compressedInput = document.getElementById('compressedImageInput');
-            if (!compressedInput.files.length) {
-                e.preventDefault();
-                alert('Please select an image first.');
-            }
         });
     </script>
 </body>
