@@ -92,7 +92,7 @@ if(isset($_POST['submitButton'])) {
             if (!compressImage($tempFile, $targetFile)) {
                 throw new Exception("Failed to compress image or image is still too large after compression.");
             }
-        }   else {
+        } else {
             // For PDF and GIF, just move the file (no compression)
             if (!move_uploaded_file($tempFile, $targetFile)) {
                 throw new Exception("Failed to upload file.");
@@ -153,7 +153,7 @@ if(isset($_POST['submitButton'])) {
             </div>
         <?php endif; ?>
         <form action="register.php" method="post" enctype="multipart/form-data">
-            <label>Full ??name</label>
+            <label>Full name</label>
             <input name="fName" type="text" required>
             
             <label>Alamat Kediaman penerima</label>
