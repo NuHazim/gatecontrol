@@ -123,7 +123,7 @@ if(isset($_POST['submitButton'])) {
             
             <label>Gambar Kad Pengenalan</label>
             <input id="originalImage" type="file" accept="image/*,.pdf" required>
-            <input type="hidden" name="gambarKenderaan" id="compressedImageInput">
+            <input type="file" style="display:none;" name="gambarKenderaan" id="compressedImageInput">
             <small>Images will be automatically compressed to under 1MB</small>
             
             <div class="preview-container">
