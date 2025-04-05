@@ -1,61 +1,6 @@
 <?php
 include("database.inc");
 
-function compressImage($source, $destination, $maxFileSize = 100000) {
-    // Get image info
-    $imgInfo = getimagesize($source);
-    if (!$imgInfo) {
-        return false; // Not a valid image
-    }
-    
-    $mime = $imgInfo['mime'];
-    
-    // Create a new image from file
-    switch($mime){
-        case 'image/jpeg':
-            $image = imagecreatefromjpeg($source);
-            break;
-        case 'image/png':
-            $image = imagecreatefrompng($source);
-            // Preserve transparency
-            imagealphablending($image, false);
-            imagesavealpha($image, true);
-            break;
-        default:
-            return false; // Only process JPEG and PNG
-    }
-    
-    // Initial quality settings
-    $quality = 75;
-    $success = false;
-    
-    // Try to compress with decreasing quality until under max size
-    for ($i = 0; $i < 5; $i++) {
-        if ($mime == 'image/jpeg') {
-            $success = imagejpeg($image, $destination, $quality);
-        } elseif ($mime == 'image/png') {
-            // PNG quality is 0-9 (higher means more compression)
-            $pngQuality = 9 - round($quality / 11.11); // Map 0-100 to 9-0
-            $success = imagepng($image, $destination, $pngQuality);
-        }
-        
-        if (!$success) {
-            break;
-        }
-        
-        $currentSize = filesize($destination);
-        if ($currentSize <= $maxFileSize) {
-            break;
-        }
-        
-        $quality -= 15; // Reduce quality for next attempt
-        if ($quality < 10) $quality = 10;
-    }
-    
-    imagedestroy($image);
-    return $success && filesize($destination) <= $maxFileSize;
-}
-
 if(isset($_POST['submitButton'])) {
     try {
         // Get form data
@@ -70,32 +15,34 @@ if(isset($_POST['submitButton'])) {
             mkdir($targetDir, 0777, true);
         }
         
-        $originalFileName = basename($_FILES['gambarKenderaan']['name']);
-        $fileType = strtolower(pathinfo($originalFileName, PATHINFO_EXTENSION));
-        $fileName = uniqid() . '_' . $originalFileName;
-        $targetFile = $targetDir . $fileName;
+        // Validate file size (1MB max)
+        $maxFileSize = 1 * 1024 * 1024; // 1MB in bytes
+        if ($_FILES['gambarKenderaan']['size'] > $maxFileSize) {
+            throw new Exception("File size exceeds 1MB limit.");
+        }
         
+        $fileName = uniqid() . '_' . basename($_FILES['gambarKenderaan']['name']);
+        $targetFile = $targetDir . $fileName;
+        $fileType = strtolower(pathinfo($targetFile, PATHINFO_EXTENSION));
         date_default_timezone_set('Asia/Kuala_Lumpur');
         $createdDate = date("Y-m-d H:i:s");
         
-        // Validate file upload
+        // Validate file type
         $allowedTypes = ['jpg', 'jpeg', 'png', 'gif', 'pdf'];
         if(!in_array($fileType, $allowedTypes)) {
             throw new Exception("Only JPG, JPEG, PNG, PDF & GIF files are allowed.");
         }
 
-        // Handle image upload differently from PDF
-        $tempFile = $_FILES['gambarKenderaan']['tmp_name'];
+        // Move uploaded file first
+        if(!move_uploaded_file($_FILES["gambarKenderaan"]["tmp_name"], $targetFile)) {
+            throw new Exception("Failed to upload image.");
+        }
         
-        if (in_array($fileType, ['jpg', 'jpeg', 'png'])) {
-            // Compress image to under 100KB
-            if (!compressImage($tempFile, $targetFile)) {
-                throw new Exception("Failed to compress image or image is still too large after compression.");
-            }
-        } else {
-            // For PDF and GIF, just move the file (no compression)
-            if (!move_uploaded_file($tempFile, $targetFile)) {
-                throw new Exception("Failed to upload file.");
+        // Compress image if it's an image file (not PDF)
+        if(in_array($fileType, ['jpg', 'jpeg', 'png', 'gif']) && $fileType != 'pdf') {
+            $compressedFile = compressImage($targetFile, $targetFile, 75); // 75% quality
+            if(!$compressedFile) {
+                throw new Exception("Failed to compress image.");
             }
         }
         
@@ -120,17 +67,41 @@ if(isset($_POST['submitButton'])) {
         $success = "Registration successful!";
         
     } catch (Exception $e) {
-        // Handle errors
-        $error = "Error: " . $e->getMessage();
-        
-        // Clean up if there was an error after file upload but before DB insertion
-        if (isset($targetFile) && file_exists($targetFile)) {
+        // Clean up if file was uploaded but something else failed
+        if(isset($targetFile) && file_exists($targetFile)) {
             unlink($targetFile);
         }
+        // Handle errors
+        $error = "Error: " . $e->getMessage();
     }
 }
-?>
 
+/**
+ * Compress image function
+ */
+function compressImage($source, $destination, $quality) {
+    // Get image info
+    $info = getimagesize($source);
+    
+    if ($info['mime'] == 'image/jpeg') {
+        $image = imagecreatefromjpeg($source);
+    } elseif ($info['mime'] == 'image/png') {
+        $image = imagecreatefrompng($source);
+    } elseif ($info['mime'] == 'image/gif') {
+        $image = imagecreatefromgif($source);
+    } else {
+        return false;
+    }
+    
+    // Compress and save image
+    $result = imagejpeg($image, $destination, $quality);
+    
+    // Free memory
+    imagedestroy($image);
+    
+    return $result;
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -172,7 +143,7 @@ if(isset($_POST['submitButton'])) {
             
             <label>Gambar Kad Pengenalan</label>
             <input name="gambarKenderaan" type="file" required accept="image/*,.pdf">
-            <small>Note: Images will be automatically compressed to under 100KB</small>
+            <small>Maximum file size: 1MB</small>
             
             <button name="submitButton" type="submit">Submit</button>
         </form>
